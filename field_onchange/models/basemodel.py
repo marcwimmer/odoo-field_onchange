@@ -4,6 +4,10 @@ from odoo.exceptions import UserError, RedirectWarning, ValidationError
 class Base(models.AbstractModel):
     _inherit = 'base'
 
+    @api.model
+    def _needs_recordchange_tracking(self):
+        return bool(self._recordchange_methods) or bool(self._fieldchange_methods)
+        
     @classmethod
     def _init_constraints_onchanges(cls):
         super()._init_constraints_onchanges()
@@ -71,36 +75,38 @@ class Base(models.AbstractModel):
             method(self)
 
     def write(self, vals):
-        tracked_fields = list(self._get_tracked_fields_recordchange()) or []
-        if tracked_fields:
-            before = {}
-            for rec in self:
-                before.setdefault(rec.id, {})
-                for field in tracked_fields:
-                    before[rec.id][field] = rec[field]
+        if self._needs_recordchange_tracking():
+            tracked_fields = list(self._get_tracked_fields_recordchange()) or []
+            if tracked_fields:
+                before = {}
+                for rec in self:
+                    before.setdefault(rec.id, {})
+                    for field in tracked_fields:
+                        before[rec.id][field] = rec[field]
 
         result = super().write(vals)
 
-        if tracked_fields:
-            after = {}
-            for rec in self:
-                after.setdefault(rec.id, {})
-                for field in tracked_fields:
-                    after[rec.id][field] = rec[field]
-
-            for rec in self:
-                changed_fields = []
-                a = after[rec.id]
-                b = before[rec.id]
-                changeset = {}
-                for field in tracked_fields:
-                    if a[field] != b[field]:
-                        changed_fields.append(field)
-                        changeset[field] = {
-                            'new': a[field],
-                            'old': b[field],
-                        }
-                rec.trigger_field_change(changeset)
-                rec.trigger_record_change(changed_fields)
-
-        return result
+        if self._needs_recordchange_tracking():
+            if tracked_fields:
+                after = {}
+                for rec in self:
+                    after.setdefault(rec.id, {})
+                    for field in tracked_fields:
+                        after[rec.id][field] = rec[field]
+    
+                for rec in self:
+                    changed_fields = []
+                    a = after[rec.id]
+                    b = before[rec.id]
+                    changeset = {}
+                    for field in tracked_fields:
+                        if a[field] != b[field]:
+                            changed_fields.append(field)
+                            changeset[field] = {
+                                'new': a[field],
+                                'old': b[field],
+                            }
+                    rec.trigger_field_change(changeset)
+                    rec.trigger_record_change(changed_fields)
+    
+            return result
