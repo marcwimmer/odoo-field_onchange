@@ -109,4 +109,4 @@ class Base(models.AbstractModel):
                     rec.trigger_field_change(changeset)
                     rec.trigger_record_change(changed_fields)
     
-            return result
+        return result
